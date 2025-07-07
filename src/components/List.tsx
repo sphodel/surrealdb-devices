@@ -1,0 +1,267 @@
+import React, { useEffect, useState } from 'react';
+import { useSurrealClient } from '../api/SurrealProvider';
+import { CheckCircleTwoTone, CloseCircleTwoTone, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import { Layout, Menu, Table, Button, Input, Space, Modal, Form, message, Switch } from 'antd';
+
+const { Sider, Content } = Layout;
+
+
+interface DeviceData {
+  id?: string;
+  created_at: string;
+  hostname: string;
+  mac: string;
+  valid: boolean;
+  feature: string[];
+  [key: string]: any;
+}
+
+const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+  const client = useSurrealClient();
+  const [tables, setTables] = useState<string[]>([]);
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [data, setData] = useState<DeviceData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm] = Form.useForm<Pick<DeviceData, 'valid'>>();
+  const [editingRecord, setEditingRecord] = useState<DeviceData | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+
+  useEffect(() => {
+    const fetchTables = async () => {
+      try {
+        const result = await client.query<any>("INFO FOR DB");
+        const dbInfo = result?.[0] as { tables?: Record<string, unknown> };
+        const tableList = dbInfo && dbInfo.tables ? Object.keys(dbInfo.tables) : [];
+        setTables(tableList);
+        if (tableList.length > 0) setSelectedTable(tableList[0]);
+      } catch (err) {
+        console.error("获取表失败", err);
+        setTables([]);
+      }
+    };
+    fetchTables();
+  }, [client]);
+
+  const fetchTableData = async () => {
+    if (!selectedTable) return;
+    setLoading(true);
+    try {
+      let result = await client.select(selectedTable);
+
+      result = Array.isArray(result) ? result : [];
+      const normalized: DeviceData[] = result.map((row: any) => ({
+        id: row.id ?? '',
+        created_at: row.created_at ?? '',
+        hostname: row.hostname ?? '',
+        mac: row.mac ?? '',
+        valid: typeof row.valid === 'boolean' ? row.valid : false,
+        feature: Array.isArray(row.feature) ? row.feature : [],
+        ...row,
+      }));
+      let filtered = normalized;
+      if (search) {
+        filtered = filtered.filter((row) => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
+      }
+      console.log(filtered)
+      setData(filtered);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTableData();
+    // eslint-disable-next-line
+  }, [selectedTable, search]);
+
+  const getFormattedId = (idObj: any) => {
+    if (idObj && typeof idObj === 'object' && idObj.tb && idObj.id) {
+      return `${idObj.id}`;
+    }
+    return String(idObj);
+  };
+
+  const allKeys = ['id', 'created_at', 'hostname', 'mac', 'valid', 'feature'];
+
+  const handleDelete = async (record: DeviceData) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除这条数据吗？',
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          if(record&&record.id){
+            await client.delete(record.id);
+          }
+          
+          message.success('删除成功');
+          fetchTableData();
+        } catch {
+          message.error('删除失败');
+        }
+      },
+    });
+  };
+
+  const handleEdit = (record: DeviceData) => {
+    setEditingRecord(record);
+    setEditModalOpen(true);
+    editForm.setFieldsValue({
+      valid: record.valid,
+    });
+  };
+
+  const handleEditOk = async () => {
+    try {
+      const values = await editForm.validateFields();
+      if (editingRecord && editingRecord.id) {
+        await client.merge(editingRecord.id, {
+          valid: values.valid,
+          created_at: new Date().toISOString(),
+        });
+        message.success('更新成功');
+        setEditModalOpen(false);
+        setEditingRecord(null);
+        fetchTableData();
+      }
+    } catch (e) {
+      console.error('更新失败', e);
+      message.error('更新失败');
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) return;
+    Modal.confirm({
+      title: '批量删除',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 条数据吗？`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      async onOk() {
+        try {
+          await Promise.all(selectedRowKeys.map(id => client.delete(id as string)));
+          message.success('批量删除成功');
+          setSelectedRowKeys([]);
+          fetchTableData();
+        } catch {
+          message.error('批量删除失败');
+        }
+      },
+    });
+  };
+
+  const columns = [
+    ...allKeys.map((key) => ({
+      title: key,
+      dataIndex: key,
+      key,
+      ellipsis: true,
+      render: (value: any) => {
+        if (key === 'id') {
+          return getFormattedId(value);
+        }
+        if (key === 'valid') {
+          return value ? <CheckCircleTwoTone twoToneColor="#52c41a" /> : <CloseCircleTwoTone twoToneColor="#ff4d4f" />;
+        }
+        if (key === 'feature') {
+          return Array.isArray(value) ? value.join(', ') : '';
+        }
+        return String(value);
+      },
+    })),
+    {
+      title: '操作',
+      key: 'action',
+      fixed: 'right' as const,
+      width: 120,
+      render: (_: any, record: DeviceData) => (
+        <Space>
+          <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
+          <Button icon={<DeleteOutlined />} size="small" danger onClick={() => handleDelete(record)} />
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider width={180} style={{ background: '#fff' }}>
+        <div style={{ padding: 16, textAlign: 'center' }}>
+          <Button type="primary" danger onClick={() => {
+            localStorage.removeItem('surrealist_token');
+            onLogout();
+          }} style={{ width: '100%' }}>
+            退出登录
+          </Button>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedTable]}
+          onClick={({ key }: { key: string }) => setSelectedTable(key)}
+          items={tables.map((table) => ({ key: table, label: table }))}
+        />
+      </Sider>
+      <Layout>
+        <Content style={{ margin: 24, background: '#fff', padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ margin: 0 }}>{selectedTable} 数据</h2>
+            <Space>
+              <Input
+                prefix={<SearchOutlined />}
+                placeholder="搜索"
+                allowClear
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: 200 }}
+              />
+              <Button
+                type="primary"
+                danger
+                disabled={selectedRowKeys.length === 0}
+                onClick={handleBatchDelete}
+              >
+                批量删除
+              </Button>
+            </Space>
+          </div>
+          <Table
+            rowKey={(record: DeviceData) => record.id || JSON.stringify(record)}
+            columns={columns}
+            dataSource={data}
+            loading={loading}
+            bordered
+            size="middle"
+            scroll={{ x: true }}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: setSelectedRowKeys,
+            }}
+          />
+          <Modal
+            title={`编辑${selectedTable}数据`}
+            open={editModalOpen}
+            onCancel={() => setEditModalOpen(false)}
+            onOk={handleEditOk}
+            okText="保存"
+            cancelText="取消"
+          >
+            <Form form={editForm} layout="vertical">
+              <Form.Item name="valid" label="valid" valuePropName="checked">
+                <Switch checkedChildren="有效" unCheckedChildren="无效" />
+              </Form.Item>
+            </Form>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
+  );
+};
+
+export default List;
