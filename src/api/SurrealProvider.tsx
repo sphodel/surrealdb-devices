@@ -64,12 +64,12 @@ export function SurrealProvider({
 	// Auto-connect on mount (if enabled) and cleanup on unmount
 	useEffect(() => {
 		if (autoConnect) {
-			connect();
+			void connect();
 		}
 
 		return () => {
 			reset();
-			surrealInstance.close();
+			void surrealInstance.close();
 		};
 	}, [autoConnect, connect, reset, surrealInstance]);
 
