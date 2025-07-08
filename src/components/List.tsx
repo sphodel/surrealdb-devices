@@ -16,6 +16,12 @@ interface DeviceData {
   [key: string]: any;
 }
 
+const FEATURE_OPTIONS = [
+  { label: 'QQMusic', value: 'QQMusic' },
+  { label: 'USB', value: 'USB' },
+  { label: 'Tidal', value: 'Tidal' },
+];
+
 const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const client = useSurrealClient();
   const [tables, setTables] = useState<string[]>([]);
@@ -24,7 +30,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm] = Form.useForm<Pick<DeviceData, 'valid'>>();
+  const [editForm] = Form.useForm<Pick<DeviceData, 'valid' | 'feature'>>();
   const [editingRecord, setEditingRecord] = useState<DeviceData | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
@@ -41,31 +47,15 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         setTables([]);
       }
     };
-    fetchTables();
+    void fetchTables();
   }, [client]);
 
   const fetchTableData = async () => {
     if (!selectedTable) return;
     setLoading(true);
     try {
-      let result = await client.select(selectedTable);
-
-      result = Array.isArray(result) ? result : [];
-      const normalized: DeviceData[] = result.map((row: any) => ({
-        id: row.id ?? '',
-        created_at: row.created_at ?? '',
-        hostname: row.hostname ?? '',
-        mac: row.mac ?? '',
-        valid: typeof row.valid === 'boolean' ? row.valid : false,
-        feature: Array.isArray(row.feature) ? row.feature : [],
-        ...row,
-      }));
-      let filtered = normalized;
-      if (search) {
-        filtered = filtered.filter((row) => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
-      }
-      console.log(filtered)
-      setData(filtered);
+      const result = await client.select(selectedTable) as unknown as DeviceData[];
+      setData(result);
     } catch {
       setData([]);
     } finally {
@@ -74,11 +64,11 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   };
 
   useEffect(() => {
-    fetchTableData();
+    void fetchTableData();
     // eslint-disable-next-line
   }, [selectedTable, search]);
 
-  const getFormattedId = (idObj: any) => {
+  const getFormattedId = (idObj: {tb:string,id:string}) => {
     if (idObj && typeof idObj === 'object' && idObj.tb && idObj.id) {
       return `${idObj.id}`;
     }
@@ -87,7 +77,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const allKeys = ['id', 'created_at', 'hostname', 'mac', 'valid', 'feature'];
 
-  const handleDelete = async (record: DeviceData) => {
+  const handleDelete =  (record: DeviceData) => {
     Modal.confirm({
       title: '确认删除',
       content: '确定要删除这条数据吗？',
@@ -100,10 +90,10 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             await client.delete(record.id);
           }
           
-          message.success('删除成功');
-          fetchTableData();
+          void message.success('删除成功');
+          await fetchTableData();
         } catch {
-          message.error('删除失败');
+          void message.error('删除失败');
         }
       },
     });
@@ -114,6 +104,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     setEditModalOpen(true);
     editForm.setFieldsValue({
       valid: record.valid,
+      feature: record.feature || [],
     });
   };
 
@@ -123,20 +114,21 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       if (editingRecord && editingRecord.id) {
         await client.merge(editingRecord.id, {
           valid: values.valid,
+          feature: values.feature,
           created_at: new Date().toISOString(),
         });
-        message.success('更新成功');
+        void message.success('更新成功');
         setEditModalOpen(false);
         setEditingRecord(null);
-        fetchTableData();
+        await fetchTableData();
       }
     } catch (e) {
       console.error('更新失败', e);
-      message.error('更新失败');
+      void message.error('更新失败');
     }
   };
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete =  () => {
     if (selectedRowKeys.length === 0) return;
     Modal.confirm({
       title: '批量删除',
@@ -147,11 +139,11 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       async onOk() {
         try {
           await Promise.all(selectedRowKeys.map(id => client.delete(id as string)));
-          message.success('批量删除成功');
+          void message.success('批量删除成功');
           setSelectedRowKeys([]);
-          fetchTableData();
+          await fetchTableData();
         } catch {
-          message.error('批量删除失败');
+          void message.error('批量删除失败');
         }
       },
     });
@@ -163,7 +155,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (value: any) => {
+      render: (value: {tb:string,id:string}) => {
         if (key === 'id') {
           return getFormattedId(value);
         }
@@ -255,6 +247,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             <Form form={editForm} layout="vertical">
               <Form.Item name="valid" label="valid" valuePropName="checked">
                 <Switch checkedChildren="有效" unCheckedChildren="无效" />
+              </Form.Item>
+              <Form.Item name="feature" label="feature">
+                <Select mode="multiple" options={FEATURE_OPTIONS} placeholder="请选择功能" allowClear />
               </Form.Item>
             </Form>
           </Modal>

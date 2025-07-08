@@ -34,12 +34,12 @@ interface SurrealProviderState {
 const SurrealContext = createContext<SurrealProviderState | undefined>(undefined);
 
 export function SurrealProvider({
-	children,
-	client,
-	endpoint,
-	params,
-	autoConnect = true,
-}: SurrealProviderProps) {
+									children,
+									client,
+									endpoint,
+									params,
+									autoConnect = true,
+								}: SurrealProviderProps) {
 	// Surreal instance remains stable across re-renders
 	const [surrealInstance] = useState(() => client ?? new Surreal());
 
@@ -64,12 +64,12 @@ export function SurrealProvider({
 	// Auto-connect on mount (if enabled) and cleanup on unmount
 	useEffect(() => {
 		if (autoConnect) {
-			connect();
+			void connect();
 		}
 
 		return () => {
 			reset();
-			surrealInstance.close();
+			void surrealInstance.close();
 		};
 	}, [autoConnect, connect, reset, surrealInstance]);
 

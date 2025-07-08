@@ -28,7 +28,7 @@ function App() {
         setAuthChecked(true)
       }
     }
-    tryAuth()
+    void tryAuth()
   }, [isSuccess, token, client, authChecked])
 
   if (!authChecked) return <div>Connecting to SurrealDB...</div>
