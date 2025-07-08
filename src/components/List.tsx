@@ -20,7 +20,6 @@ import {
   Switch,
   Select,
 } from "antd";
-import { ColumnsType } from "antd/es/table";
 import * as dayjs from "dayjs";
 
 const { Sider, Content } = Layout;
@@ -191,7 +190,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     });
   };
 
-  const columns: ColumnsType<DeviceData> = [
+  const columns = [
     ...allKeys.map((key) => ({
       title: key,
       dataIndex: key,
