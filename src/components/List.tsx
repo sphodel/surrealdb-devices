@@ -21,6 +21,7 @@ import {
   Select,
 } from "antd";
 import * as dayjs from "dayjs";
+import { Uuid } from "surrealdb";
 
 const { Sider, Content } = Layout;
 
@@ -71,30 +72,62 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     void fetchTables();
   }, [client]);
 
-  const fetchTableData = async () => {
-    if (!selectedTable) return;
-    setLoading(true);
-    try {
-      const result = (await client.select(
-        selectedTable,
-      )) as unknown as DeviceData[];
-      const filtered = search
-        ? result.filter((row) =>
-            JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
-          )
-        : result;
-      setData(filtered);
-    } catch {
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void fetchTableData();
-    // eslint-disable-next-line
-  }, [selectedTable, search]);
+    if (!selectedTable) return;
+
+    let queryUuid: Uuid;
+    let isMounted = true;
+
+    const fetchAndSubscribe = async () => {
+      try {
+        setLoading(true);
+        const initialData = await client.select<DeviceData>(selectedTable);
+        if (isMounted) {
+          setData(initialData);
+          setLoading(false);
+        }
+        queryUuid = await client.live<DeviceData>(
+          selectedTable,
+          (action: 'CREATE' | 'UPDATE' | 'DELETE' | 'CLOSE', result: unknown) => {
+            if (!isMounted) return;
+            if (action === 'CLOSE') {
+              console.log(`Live query closed: ${result as 'killed' | 'disconnected'}`);
+              return;
+            }
+            const record = result as DeviceData;
+            if (!record || !record.id) {
+              return;
+            }
+            setData((prev) => {
+              const id = record.id;
+              switch (action) {
+                case "CREATE":
+                  return prev.some(item => item.id === id) ? prev : [...prev, record];
+                case "UPDATE":
+                  return prev.map((item) => (item.id === id ? record : item));
+                case "DELETE":
+                  return prev.filter((item) => item.id !== id);
+                default:
+                  return prev;
+              }
+            });
+          },
+        );
+      } catch (e) {
+        console.error("Live subscription or initial fetch failed", e);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    void fetchAndSubscribe();
+    return () => {
+      isMounted = false;
+      if (queryUuid) {
+        void client.kill(queryUuid);
+      }
+    };
+  }, [selectedTable, client]);
+
 
   const getFormattedId = (idObj: { tb: string; id: string }) => {
     if (idObj && typeof idObj === "object" && idObj.tb && idObj.id) {
@@ -104,13 +137,12 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   };
 
   const allKeys = [
-    "id",
-    "created_at",
     "hostname",
     "mac",
-    "valid",
     "features",
     "mark",
+    "valid",
+    "created_at"
   ];
 
   const handleDelete = (record: DeviceData) => {
@@ -127,7 +159,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           }
 
           void message.success("删除成功");
-          await fetchTableData();
+          setData((prev) => prev.filter((item) => item.id !== record.id));
         } catch {
           void message.error("删除失败");
         }
@@ -158,7 +190,13 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           void message.success("更新成功");
           setEditModalOpen(false);
           setEditingRecord(null);
-          void fetchTableData();
+          setData((prev) =>
+            prev.map((item) =>
+              item.id === editingRecord.id
+                ? { ...item, ...values }
+                : item
+            )
+          );
         }
       })
       .catch((e) => {
@@ -181,8 +219,10 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             selectedRowKeys.map((id) => client.delete(id as string)),
           );
           void message.success("批量删除成功");
+          setData((prev) =>
+            prev.filter((item) => !selectedRowKeys.includes(item.id ?? ""))
+          );
           setSelectedRowKeys([]);
-          await fetchTableData();
         } catch {
           void message.error("批量删除失败");
         }
