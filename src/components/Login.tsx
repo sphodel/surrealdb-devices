@@ -8,25 +8,30 @@ interface LoginProps {
 
 const { Title } = Typography;
 
+type LoginFormValues = {
+  user: string;
+  pass: string;
+};
+
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const client = useSurrealClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
-  const onFinish = async (values: any) => {
+  const onFinish =  (values: LoginFormValues) => {
     setLoading(true);
     setError('');
-    try {
-      let params: any = { username: values.user, password: values.pass };
-      const token = await client.signin(params);
-      localStorage.setItem('surrealist_token', token);
-      onLogin(token);
-    } catch (err) {
-      console.error(err);
-      setError('登录失败，请检查用户名和密码');
-    } finally {
+    const params = { username: values.user, password: values.pass };
+    client.signin(params).then(token=>{
+      localStorage.setItem('surrealist_token', token );
+      onLogin(token );
+    }).catch(_=>{
+      setError(`登录失败，请检查用户名和密码`);
+    }).finally(()=>{
       setLoading(false);
-    }
+    });
+      
+
   };
 
   return (
