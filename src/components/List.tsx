@@ -155,7 +155,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             valid: values.valid,
             features: values.features,
             mark: values.mark,
-            created_at: dayjs().format("YYYY-MM-DD HH:mm:ss"),
           });
           void message.success("更新成功");
           setEditModalOpen(false);
@@ -198,7 +197,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (value: { tb: string; id: string } | string | boolean | string[]) => {
+      render: (
+        value: { tb: string; id: string } | string | boolean | string[],
+      ) => {
         if (key === "id") {
           return getFormattedId(value as { tb: string; id: string });
         }
@@ -212,8 +213,11 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         if (key === "features") {
           return Array.isArray(value) ? value.join(", ") : "";
         }
+        if (key === "created_at") {
+          return dayjs(value).format("YYYY-MM-DD HH:mm:ss");
+        }
         if (key === "mark") {
-          return typeof value === 'string' ? value : '';
+          return typeof value === "string" ? value : "";
         }
         return String(value);
       },
