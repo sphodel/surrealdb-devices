@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Login from './components/Login'
 import List from './components/List'
 import { useSurreal, useSurrealClient } from './api/SurrealProvider'
+import { Spin } from 'antd'
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
@@ -31,7 +32,11 @@ function App() {
     void tryAuth()
   }, [isSuccess, token, client, authChecked])
 
-  if (!authChecked) return <div>Connecting to SurrealDB...</div>
+  if (!authChecked) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Spin tip="连接 SurrealDB..." size="large" />
+    </div>
+  )
 
   return loggedIn ? <List onLogout={() => {
     localStorage.removeItem('surrealist_token')

@@ -32,6 +32,7 @@ interface DeviceData {
   mac: string;
   valid: boolean;
   features: string[];
+  mark: string;
   [key: string]: any;
 }
 
@@ -49,7 +50,8 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm] = Form.useForm<Pick<DeviceData, "valid" | "features">>();
+  const [editForm] =
+    Form.useForm<Pick<DeviceData, "valid" | "features" | "mark">>();
   const [editingRecord, setEditingRecord] = useState<DeviceData | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
@@ -102,7 +104,15 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     return String(idObj);
   };
 
-  const allKeys = ["id", "created_at", "hostname", "mac", "valid", "features"];
+  const allKeys = [
+    "id",
+    "created_at",
+    "hostname",
+    "mac",
+    "valid",
+    "features",
+    "mark",
+  ];
 
   const handleDelete = (record: DeviceData) => {
     Modal.confirm({
@@ -132,6 +142,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     editForm.setFieldsValue({
       valid: record.valid,
       features: record.features || [],
+      mark: record.mark || "",
     });
   };
 
@@ -143,6 +154,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           await client.merge(editingRecord.id, {
             valid: values.valid,
             features: values.features,
+            mark: values.mark,
             created_at: dayjs().format("YYYY-MM-DD HH:mm:ss"),
           });
           void message.success("更新成功");
@@ -186,9 +198,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       dataIndex: key,
       key,
       ellipsis: true,
-      render: (value: { tb: string; id: string }) => {
+      render: (value: { tb: string; id: string } | string | boolean | string[]) => {
         if (key === "id") {
-          return getFormattedId(value);
+          return getFormattedId(value as { tb: string; id: string });
         }
         if (key === "valid") {
           return value ? (
@@ -199,6 +211,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         }
         if (key === "features") {
           return Array.isArray(value) ? value.join(", ") : "";
+        }
+        if (key === "mark") {
+          return typeof value === 'string' ? value : '';
         }
         return String(value);
       },
@@ -311,6 +326,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
                   placeholder="请选择功能"
                   allowClear
                 />
+              </Form.Item>
+              <Form.Item name="mark" label="mark">
+                <Input placeholder="请输入备注" />
               </Form.Item>
             </Form>
           </Modal>
