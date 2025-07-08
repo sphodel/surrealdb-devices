@@ -213,7 +213,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           return Array.isArray(value) ? value.join(", ") : "";
         }
         if (key === "created_at") {
-          return dayjs(value).format("YYYY-MM-DD HH:mm:ss");
+          return (typeof value === "string" || typeof value === "number")
+            ? dayjs(value).format("YYYY-MM-DD HH:mm:ss")
+            : "";
         }
         if (key === "mark") {
           return typeof value === "string" ? value : "";
