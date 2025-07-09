@@ -20,7 +20,7 @@ import {
   Switch,
   Select,
 } from "antd";
-import * as dayjs from "dayjs";
+import dayjs  from "dayjs";
 import { Uuid } from "surrealdb";
 
 const { Sider, Content } = Layout;
