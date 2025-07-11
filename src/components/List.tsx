@@ -184,7 +184,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         if (editingRecord && editingRecord.id) {
           await client.merge(editingRecord.id, {
             valid: values.valid,
-            features: values.features,
+            features: [...values.features].sort(),
             mark: values.mark,
           });
           void message.success("更新成功");
