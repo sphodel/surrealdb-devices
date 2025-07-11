@@ -20,7 +20,7 @@ import {
   Switch,
   Select,
 } from "antd";
-import dayjs  from "dayjs";
+import dayjs from "dayjs";
 import { Uuid } from "surrealdb";
 
 const { Sider, Content } = Layout;
@@ -38,8 +38,8 @@ interface DeviceData {
 
 const FEATURES_OPTIONS = [
   { label: "QQMusic", value: "QQMusic" },
-  { label: "USB", value: "USB" },
   { label: "Tidal", value: "Tidal" },
+  { label: "USB", value: "USB" },
 ];
 
 const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
@@ -250,8 +250,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           );
         }
         if (key === "features") {
-          return Array.isArray(value) ? value.join(", ") : "";
+          return Array.isArray(value) ? [...value].sort().join(", ") : "";
         }
+
         if (key === "created_at") {
           return (typeof value === "string" || typeof value === "number")
             ? dayjs(value).format("YYYY-MM-DD HH:mm:ss")

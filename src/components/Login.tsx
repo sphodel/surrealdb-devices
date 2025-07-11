@@ -39,7 +39,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       maxWidth: 400, margin: '100px auto', padding: 32, background: '#fff',
       borderRadius: 8, boxShadow: '0 2px 8px #f0f1f2'
     }}>
-      <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>SurrealDB 登录</Title>
+      <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>XPlayer管理后台</Title>
 
       <Form layout="vertical" onFinish={onFinish}>
         <Form.Item label="用户名" name="user" rules={[{ required: true, message: '请输入用户名' }]}>
