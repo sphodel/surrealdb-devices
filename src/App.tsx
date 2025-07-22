@@ -4,6 +4,7 @@ import List from './components/List'
 import { useSurreal, useSurrealClient } from './api/SurrealProvider'
 import { Spin } from 'antd'
 
+
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)

@@ -22,6 +22,10 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { Uuid } from "surrealdb";
+import relativeTime from "dayjs/plugin/relativeTime"
+import 'dayjs/locale/zh-cn';
+dayjs.extend(relativeTime)
+dayjs.locale('zh-cn')
 
 const { Sider, Content } = Layout;
 
@@ -31,6 +35,7 @@ interface DeviceData {
   hostname: string;
   mac: string;
   valid: boolean;
+  connected: boolean;
   features: string[];
   mark: string;
   [key: string]: any;
@@ -41,7 +46,6 @@ const FEATURES_OPTIONS = [
   { label: "Tidal", value: "Tidal" },
   { label: "USB", value: "USB" },
 ];
-
 const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const client = useSurrealClient();
   const [tables, setTables] = useState<string[]>([]);
@@ -51,7 +55,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [search, setSearch] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm] =
-    Form.useForm<Pick<DeviceData, "valid" | "features" | "mark">>();
+    Form.useForm<Pick<DeviceData, "valid" | "connected" | "features" | "mark">>();
   const [editingRecord, setEditingRecord] = useState<DeviceData | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
@@ -139,10 +143,13 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const allKeys = [
     "hostname",
     "mac",
+    "connected",
+    "valid",
     "features",
     "mark",
-    "valid",
-    "created_at"
+    "last_active_at",
+    "created_at",
+    
   ];
 
   const handleDelete = (record: DeviceData) => {
@@ -172,6 +179,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     setEditModalOpen(true);
     editForm.setFieldsValue({
       valid: record.valid,
+      connected: record.connected,
       features: record.features || [],
       mark: record.mark || "",
     });
@@ -182,8 +190,31 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       .validateFields()
       .then(async (values) => {
         if (editingRecord && editingRecord.id) {
+          if (values.connected) {
+            try {
+              await fetch(`/v1/devices/connect/${editingRecord.mac}`, { method: 'POST' });
+              await fetch('/v1/devices/join', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(editingRecord.hostname)
+              });
+              const disconnectPromises = data
+                .filter(device => device.id !== editingRecord.id)
+                .map(device => fetch(`/v1/devices/disconnect/${device.mac}`, { method: 'POST' }));
+              await Promise.all(disconnectPromises);
+
+            } catch (error) {
+              console.error("API call failed", error);
+              void message.error("连接状态更新失败");
+              return;
+            }
+          }
+
           await client.merge(editingRecord.id, {
             valid: values.valid,
+            connected: values.connected,
             features: [...values.features].sort(),
             mark: values.mark,
           });
@@ -194,7 +225,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             prev.map((item) =>
               item.id === editingRecord.id
                 ? { ...item, ...values }
-                : item
+                : { ...item, connected: false }
             )
           );
         }
@@ -242,7 +273,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         if (key === "id") {
           return getFormattedId(value as { tb: string; id: string });
         }
-        if (key === "valid") {
+        if (key === "valid" || key === "connected") {
           return value ? (
             <CheckCircleTwoTone twoToneColor="#52c41a" />
           ) : (
@@ -260,6 +291,11 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         }
         if (key === "mark") {
           return typeof value === "string" ? value : "";
+        }
+        if (key === "last_active_at") {
+          return (typeof value === "string" || typeof value === "number")
+            ? dayjs(value).fromNow()
+            : "";
         }
         return String(value);
       },
@@ -364,6 +400,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             <Form form={editForm} layout="vertical">
               <Form.Item name="valid" label="valid" valuePropName="checked">
                 <Switch checkedChildren="有效" unCheckedChildren="无效" />
+              </Form.Item>
+              <Form.Item name="connected" label="connected" valuePropName="checked">
+                <Switch checkedChildren="已连接" unCheckedChildren="未连接" />
               </Form.Item>
               <Form.Item name="features" label="features">
                 <Select
