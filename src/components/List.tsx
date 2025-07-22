@@ -193,13 +193,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           if (values.connected) {
             try {
               await fetch(`/v1/devices/connect/${editingRecord.mac}`, { method: 'POST' });
-              await fetch('/v1/devices/join', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(editingRecord.hostname)
-              });
               const disconnectPromises = data
                 .filter(device => device.id !== editingRecord.id)
                 .map(device => fetch(`/v1/devices/disconnect/${device.mac}`, { method: 'POST' }));
