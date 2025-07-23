@@ -6,6 +6,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
+  PoweroffOutlined,
 } from "@ant-design/icons";
 import {
   Layout,
@@ -19,6 +20,7 @@ import {
   message,
   Switch,
   Select,
+  Tooltip,
 } from "antd";
 import dayjs from "dayjs";
 import { Uuid } from "surrealdb";
@@ -55,7 +57,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [search, setSearch] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm] =
-    Form.useForm<Pick<DeviceData, "valid" | "connected" | "features" | "mark">>();
+    Form.useForm<Pick<DeviceData, "valid" | "features" | "mark">>();
   const [editingRecord, setEditingRecord] = useState<DeviceData | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
@@ -145,11 +147,10 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     "mac",
     "connected",
     "valid",
+    "last_active_at",
     "features",
     "mark",
-    "last_active_at",
     "created_at",
-    
   ];
 
   const handleDelete = (record: DeviceData) => {
@@ -166,7 +167,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           }
 
           void message.success("删除成功");
-          setData((prev) => prev.filter((item) => item.id !== record.id));
         } catch {
           void message.error("删除失败");
         }
@@ -179,7 +179,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     setEditModalOpen(true);
     editForm.setFieldsValue({
       valid: record.valid,
-      connected: record.connected,
       features: record.features || [],
       mark: record.mark || "",
     });
@@ -190,37 +189,14 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       .validateFields()
       .then(async (values) => {
         if (editingRecord && editingRecord.id) {
-          if (values.connected) {
-            try {
-              await fetch(`/v1/devices/connect/${editingRecord.mac}`, { method: 'POST' });
-              const disconnectPromises = data
-                .filter(device => device.id !== editingRecord.id)
-                .map(device => fetch(`/v1/devices/disconnect/${device.mac}`, { method: 'POST' }));
-              await Promise.all(disconnectPromises);
-
-            } catch (error) {
-              console.error("API call failed", error);
-              void message.error("连接状态更新失败");
-              return;
-            }
-          }
-
           await client.merge(editingRecord.id, {
             valid: values.valid,
-            connected: values.connected,
             features: [...values.features].sort(),
             mark: values.mark,
           });
           void message.success("更新成功");
           setEditModalOpen(false);
           setEditingRecord(null);
-          setData((prev) =>
-            prev.map((item) =>
-              item.id === editingRecord.id
-                ? { ...item, ...values }
-                : { ...item, connected: false }
-            )
-          );
         }
       })
       .catch((e) => {
@@ -243,9 +219,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             selectedRowKeys.map((id) => client.delete(id as string)),
           );
           void message.success("批量删除成功");
-          setData((prev) =>
-            prev.filter((item) => !selectedRowKeys.includes(item.id ?? ""))
-          );
           setSelectedRowKeys([]);
         } catch {
           void message.error("批量删除失败");
@@ -253,6 +226,50 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       },
     });
   };
+
+  const handleConnectionToggle = async (recordToToggle: DeviceData) => {
+    try {
+      if (recordToToggle.connected) {
+        const response = await fetch(`/v1/devices/disconnect/${recordToToggle.mac}`, { method: 'POST' });
+        if (!response.ok) {
+          throw new Error(`断开连接失败: ${response.status}`);
+        }
+        void message.success("断开连接成功");
+        setData(prev => prev.map(item => 
+          item.id === recordToToggle.id ? { ...item, connected: false } : item
+        ));
+        return;
+      }
+      const currentlyConnected = data.find(item => item.connected);
+      if (currentlyConnected) {
+      try {
+        const disconnectResponse = await fetch(`/v1/devices/disconnect/${currentlyConnected.mac}`, { method: 'POST' });
+        if (!disconnectResponse.ok) throw new Error(`无法断开之前的设备: ${disconnectResponse.status}`);
+        setData(prev => prev.map(item =>
+          item.id === currentlyConnected.id ? { ...item, connected: false } : item
+        ));
+      } catch (error) {
+        console.error("Failed to disconnect previous device", error);
+        void message.error((error as Error).message);
+        return;
+      }
+    }
+      const connectResponse = await fetch(`/v1/devices/connect/${recordToToggle.mac}`, { method: 'POST' });
+      if (!connectResponse.ok) {
+        throw new Error(`连接新设备失败: ${connectResponse.status}`);
+      }
+      void message.success("连接成功");
+      setData(prev => prev.map(item => ({
+        ...item,
+        connected: item.id === recordToToggle.id,
+      })));
+
+    } catch (error) {
+      console.error("Connection operation failed", error);
+      void message.error((error as Error).message || '操作失败');
+    }
+  };
+
 
   const columns = [
     ...allKeys.map((key) => ({
@@ -300,17 +317,30 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       width: 120,
       render: (_: any, record: DeviceData) => (
         <Space>
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => handleEdit(record)}
-          />
-          <Button
-            icon={<DeleteOutlined />}
-            size="small"
-            danger
-            onClick={() => handleDelete(record)}
-          />
+          <Tooltip title={record.connected ? "断开连接" : "设为连接"}>
+            <Button
+              icon={<PoweroffOutlined />}
+              size="small"
+              type={record.connected ? "primary" : "default"}
+              danger={record.connected}
+              onClick={() => void handleConnectionToggle(record)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => handleEdit(record)}
+            />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Button
+              icon={<DeleteOutlined />}
+              size="small"
+              danger
+              onClick={() => handleDelete(record)}
+            />
+          </Tooltip>
         </Space>
       ),
     },
@@ -393,9 +423,6 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             <Form form={editForm} layout="vertical">
               <Form.Item name="valid" label="valid" valuePropName="checked">
                 <Switch checkedChildren="有效" unCheckedChildren="无效" />
-              </Form.Item>
-              <Form.Item name="connected" label="connected" valuePropName="checked">
-                <Switch checkedChildren="已连接" unCheckedChildren="未连接" />
               </Form.Item>
               <Form.Item name="features" label="features">
                 <Select
