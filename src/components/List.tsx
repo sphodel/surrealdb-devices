@@ -23,7 +23,7 @@ import {
   Tooltip,
 } from "antd";
 import dayjs from "dayjs";
-import { Uuid } from "surrealdb";
+import { RecordId, Uuid } from "surrealdb";
 import relativeTime from "dayjs/plugin/relativeTime"
 import 'dayjs/locale/zh-cn';
 dayjs.extend(relativeTime)
@@ -32,7 +32,7 @@ dayjs.locale('zh-cn')
 const { Sider, Content } = Layout;
 
 interface DeviceData {
-  id?: string;
+  id: RecordId;
   created_at: string;
   hostname: string;
   mac: string;
@@ -108,11 +108,11 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
               const id = record.id;
               switch (action) {
                 case "CREATE":
-                  return prev.some(item => item.id === id) ? prev : [...prev, record];
+                  return prev.some(item => item.id.equals(id)) ? prev : [...prev, record];
                 case "UPDATE":
-                  return prev.map((item) => (item.id === id ? record : item));
+                  return prev.map((item) => (item.id.equals(id) ? record : item));
                 case "DELETE":
-                  return prev.filter((item) => item.id !== id);
+                  return prev.filter((item) => !item.id.equals(id));
                 default:
                   return prev;
               }
@@ -135,9 +135,9 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   }, [selectedTable, client]);
 
 
-  const getFormattedId = (idObj: { tb: string; id: string }) => {
-    if (idObj && typeof idObj === "object" && idObj.tb && idObj.id) {
-      return `${idObj.id}`;
+  const getFormattedId = (idObj: RecordId) => {
+    if (idObj && typeof idObj.id === 'string') {
+        return idObj.id;
     }
     return String(idObj);
   };
@@ -230,7 +230,8 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const handleConnectionToggle = async (recordToToggle: DeviceData) => {
     try {
       if (recordToToggle.connected) {
-        const response = await fetch(`/v1/devices/disconnect/${recordToToggle.mac}`, { method: 'POST' });
+        const encodedMac = encodeURIComponent(recordToToggle.mac);
+        const response = await fetch(`/v1/devices/disconnect/${encodedMac}`, { method: 'POST' });
         if (!response.ok) {
           throw new Error(`断开连接失败: ${response.status}`);
         }
@@ -243,7 +244,8 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       const currentlyConnected = data.find(item => item.connected);
       if (currentlyConnected) {
       try {
-        const disconnectResponse = await fetch(`/v1/devices/disconnect/${currentlyConnected.mac}`, { method: 'POST' });
+        const encodedCurrentlyConnectedMac = encodeURIComponent(currentlyConnected.mac);
+        const disconnectResponse = await fetch(`/v1/devices/disconnect/${encodedCurrentlyConnectedMac}`, { method: 'POST' });
         if (!disconnectResponse.ok) throw new Error(`无法断开之前的设备: ${disconnectResponse.status}`);
         setData(prev => prev.map(item =>
           item.id === currentlyConnected.id ? { ...item, connected: false } : item
@@ -254,14 +256,16 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         return;
       }
     }
-      const connectResponse = await fetch(`/v1/devices/connect/${recordToToggle.mac}`, { method: 'POST' });
+    const encodedMac = encodeURIComponent(recordToToggle.mac);
+      const connectResponse = await fetch(`/v1/devices/connect/${encodedMac}`, { method: 'POST' });
       if (!connectResponse.ok) {
         throw new Error(`连接新设备失败: ${connectResponse.status}`);
       }
       void message.success("连接成功");
+      window.open('https://xplayer-cloud.piupiupiu.cc/console', '_blank');
       setData(prev => prev.map(item => ({
         ...item,
-        connected: item.id === recordToToggle.id,
+        connected: item.id.equals(recordToToggle.id),
       })));
 
     } catch (error) {
@@ -278,10 +282,10 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       key,
       ellipsis: true,
       render: (
-        value: { tb: string; id: string } | string | boolean | string[],
+        value: RecordId | string | boolean | string[],
       ) => {
         if (key === "id") {
-          return getFormattedId(value as { tb: string; id: string });
+          return getFormattedId(value as RecordId);
         }
         if (key === "valid" || key === "connected") {
           return value ? (
@@ -400,7 +404,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             </Space>
           </div>
           <Table
-            rowKey={(record: DeviceData) => record.id || JSON.stringify(record)}
+            rowKey={(record: DeviceData) => record.id.id as string}
             columns={columns}
             dataSource={data}
             loading={loading}
