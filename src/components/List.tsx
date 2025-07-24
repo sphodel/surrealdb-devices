@@ -237,7 +237,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         }
         void message.success("断开连接成功");
         setData(prev => prev.map(item => 
-          item.id === recordToToggle.id ? { ...item, connected: false } : item
+          item.id.equals(recordToToggle.id)  ? { ...item, connected: false } : item
         ));
         return;
       }
@@ -248,7 +248,7 @@ const List: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         const disconnectResponse = await fetch(`/v1/devices/disconnect/${encodedCurrentlyConnectedMac}`, { method: 'POST' });
         if (!disconnectResponse.ok) throw new Error(`无法断开之前的设备: ${disconnectResponse.status}`);
         setData(prev => prev.map(item =>
-          item.id === currentlyConnected.id ? { ...item, connected: false } : item
+          item.id.equals(currentlyConnected.id)  ? { ...item, connected: false } : item
         ));
       } catch (error) {
         console.error("Failed to disconnect previous device", error);
